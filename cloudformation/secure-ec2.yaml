@@ -1,0 +1,130 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Ejemplo de EC2 con buenas prácticas de seguridad'
+
+Resources:
+  # Security Group con reglas específicas
+  SecureSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for web server
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: WebServerSG
+
+  # IAM Role con permisos mínimos
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Name
+          Value: EC2InstanceRole
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref EC2Role
+
+  # EC2 Instance segura
+  SecureEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0c55b159cbfafe1f0
+      InstanceType: t2.micro
+      KeyName: my-key-pair
+      SecurityGroupIds:
+        - !Ref SecureSecurityGroup
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      Tags:
+        - Key: Name
+          Value: SecureWebServer
+        - Key: Environment
+          Value: Production
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          yum update -y
+          yum install -y httpd
+          systemctl start httpd
+          systemctl enable httpd
+
+  # S3 Bucket seguro
+  SecureS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: my-secure-bucket-123
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Name
+          Value: SecureBucket
+        - Key: Environment
+          Value: Production
+
+  # IAM User con permisos mínimos
+  LimitedUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: limited-user
+      LoginProfile:
+        Password: !Ref UserPassword
+        PasswordResetRequired: true
+      Tags:
+        - Key: Name
+          Value: LimitedUser
+        - Key: Environment
+          Value: Production
+
+  LimitedUserPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: LimitedAccess
+      Users:
+        - !Ref LimitedUser
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+            Resource:
+              - !Sub 'arn:aws:s3:::${SecureS3Bucket}'
+              - !Sub 'arn:aws:s3:::${SecureS3Bucket}/*'
+
+Parameters:
+  UserPassword:
+    Type: String
+    NoEcho: true
+    Description: Password for the IAM user
+    MinLength: 8
+    AllowedPattern: '^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$'
+    ConstraintDescription: Password must contain at least 8 characters, one uppercase letter, one lowercase letter, one number, and one special character.

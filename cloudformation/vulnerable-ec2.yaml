@@ -1,0 +1,57 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Ejemplo de EC2 con vulnerabilidades de seguridad'
+
+Resources:
+  # EC2 Instance sin grupo de seguridad
+  VulnerableEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0c55b159cbfafe1f0
+      InstanceType: t2.micro
+      KeyName: my-key-pair
+      # Sin grupo de seguridad
+      # Sin IAM Role
+      # Sin tags
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          yum update -y
+          yum install -y httpd
+          systemctl start httpd
+          systemctl enable httpd
+
+  # S3 Bucket público
+  PublicS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: my-public-bucket-123
+      # Sin encriptación
+      # Sin versionamiento
+      # Sin bloqueo de acceso público
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  # IAM User con permisos excesivos
+  AdminUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: admin-user
+      # Sin política de contraseña
+      # Sin MFA
+      # Con acceso completo a la consola
+
+  AdminUserPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: AdminAccess
+      Users:
+        - !Ref AdminUser
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: '*'
+            Resource: '*'
